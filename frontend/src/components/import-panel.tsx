@@ -19,7 +19,7 @@ export function ImportPanel({ onLoaded }: { onLoaded: (m: HarnessModel, files: S
   const run = async () => {
     setBusy(true);
     setError(null);
-    try { onLoaded(await importHarness(plugin, files), { drawing: files.drawing, bom: files.bom }); } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
+    try { const r = await importHarness(plugin, files); onLoaded(r.model, { drawing: files.drawing, bom: files.bom }); } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
   };
 
   return (

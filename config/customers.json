@@ -1,0 +1,8 @@
+{
+  "customers": {
+    "beyond-gravity": {
+      "label": "Beyond Gravity",
+      "plugins": ["beyond_gravity"]
+    }
+  }
+}

@@ -1,0 +1,8 @@
+.git
+.env
+*.pdf
+**/node_modules
+frontend/.next
+**/__pycache__
+backend/data
+.next-dev.log

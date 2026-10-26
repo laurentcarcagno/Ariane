@@ -1,0 +1,125 @@
+# ARIANE: Caddy (TLS) -> frontend / backend / Keycloak, Postgres, OpenBao.
+# First start: cp .env.example .env, fill the values, then `docker compose up -d --build`.
+name: ariane
+
+x-proxy-args: &proxy-args
+  HTTP_PROXY: ${HTTP_PROXY:-}
+  HTTPS_PROXY: ${HTTPS_PROXY:-}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:?set POSTGRES_ADMIN_PASSWORD}
+      POSTGRES_DB: postgres
+      ARIANE_DB_PASSWORD: ${ARIANE_DB_PASSWORD:?set ARIANE_DB_PASSWORD}
+      KEYCLOAK_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?set KEYCLOAK_DB_PASSWORD}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./infra/postgres/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      retries: 20
+
+  openbao:
+    image: openbao/openbao:2.1
+    restart: unless-stopped
+    command: ["server"] # the image entrypoint loads /openbao/config/*.hcl
+    cap_add: [IPC_LOCK]
+    environment:
+      BAO_ADDR: http://127.0.0.1:8200
+    volumes:
+      - ./infra/openbao/config.hcl:/openbao/config/config.hcl:ro
+      - bao_data:/openbao/file
+    healthcheck:
+      # 0 = ready, 2 = sealed (the init job unseals it), anything else = down
+      test: ["CMD-SHELL", "bao status >/dev/null 2>&1; [ $$? -ne 1 ]"]
+      interval: 3s
+      retries: 20
+
+  openbao-init:
+    image: openbao/openbao:2.1
+    restart: "no"
+    depends_on:
+      openbao: { condition: service_healthy }
+    entrypoint: ["/bin/sh", "/openbao/bootstrap/init.sh"]
+    environment:
+      BAO_ADDR: http://openbao:8200
+      ARIANE_DB_PASSWORD: ${ARIANE_DB_PASSWORD}
+    volumes:
+      - ./infra/openbao/init.sh:/openbao/bootstrap/init.sh:ro
+      - ./infra/openbao/policy-ariane-backend.hcl:/openbao/policy-ariane-backend.hcl:ro
+      - bao_init:/openbao/init
+      - bao_approle:/openbao/approle
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    restart: unless-stopped
+    command: ["start", "--import-realm"]
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+      KC_HTTP_ENABLED: "true"
+      KC_HTTP_RELATIVE_PATH: /auth
+      KC_HOSTNAME: https://${ARIANE_HOST:-localhost}/auth
+      KC_PROXY_HEADERS: xforwarded
+      KC_HEALTH_ENABLED: "true"
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?set KEYCLOAK_ADMIN_PASSWORD}
+    volumes:
+      - ./infra/keycloak/realm-ariane.json:/opt/keycloak/data/import/realm-ariane.json:ro
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      args: *proxy-args
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+      openbao-init: { condition: service_completed_successfully }
+    environment:
+      ARIANE_DATABASE_URL: postgresql+asyncpg://ariane:$${DB_PASSWORD}@postgres:5432/ariane
+      ARIANE_BAO_ADDR: http://openbao:8200
+      ARIANE_BAO_APPROLE_DIR: /run/approle
+      ARIANE_OIDC_ISSUER: https://${ARIANE_HOST:-localhost}/auth/realms/ariane
+      ARIANE_OIDC_JWKS_URL: http://keycloak:8080/auth/realms/ariane/protocol/openid-connect/certs
+      ARIANE_OIDC_PUBLIC_AUTHORITY: https://${ARIANE_HOST:-localhost}/auth/realms/ariane
+    volumes:
+      - bao_approle:/run/approle:ro
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args: *proxy-args
+    restart: unless-stopped
+    depends_on:
+      backend: { condition: service_healthy }
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      ARIANE_HOST: ${ARIANE_HOST:-localhost}
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on: [frontend, backend, keycloak]
+
+volumes:
+  pg_data:
+  bao_data:
+  bao_init:
+  bao_approle:
+  caddy_data:

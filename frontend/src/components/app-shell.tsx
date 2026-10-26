@@ -5,6 +5,8 @@ import { buildFlags, counts } from "@/lib/flags";
 import { exportCsv, exportJson, exportSvg } from "@/lib/export";
 import type { HarnessModel, Issue, Selection, SourceFiles } from "@/lib/types";
 import { CablageView } from "./cablage-view";
+import { useSession } from "./auth-gate";
+import { HistoryPanel } from "./history-panel";
 import { ConnectorsView } from "./connectors-view";
 import { DrawingView } from "./drawing-view";
 import { HarnessView } from "./harness-view";
@@ -18,6 +20,8 @@ const TABS: [Tab, string][] = [["harness", "Faisceau"], ["connectors", "Connecte
 export function AppShell() {
   const [model, setModel] = useState<HarnessModel | null>(null);
   const [files, setFiles] = useState<SourceFiles>({});
+  const [refresh, setRefresh] = useState(0);
+  const { user, logout } = useSession();
   const [tab, setTab] = useState<Tab>("report");
   const [sel, setSel] = useState<Selection>({});
   const [query, setQuery] = useState("");
@@ -49,6 +53,8 @@ export function AppShell() {
         <h1 className="text-[18px] font-medium tracking-[0.18em]">ARIANE</h1>
         <span className="text-label opacity-70">{model ? `${model.plugin} · ${model.partNumber ?? ""}` : "Plans de faisceau"}</span>
         <div className="ml-auto flex items-center gap-2">
+          {user && <span className="text-label opacity-80">{user.label} · {user.username}</span>}
+          {logout && <button type="button" className="btn border-paper/40 bg-transparent text-paper hover:bg-paper/10" onClick={logout}>Déconnexion</button>}
           {c && (
             <>
               <span className="pill bg-danger text-paper">{c.error} erreurs</span>
@@ -59,7 +65,8 @@ export function AppShell() {
       </header>
       <div className="flex min-h-0 flex-1">
         <aside className="w-[300px] shrink-0 overflow-y-auto border-r border-line bg-paper">
-          <ImportPanel onLoaded={(m, f) => { setModel(m); setFiles(f); setSel({}); setTab("report"); }} />
+          <ImportPanel onLoaded={(m, f) => { setModel(m); setFiles(f); setSel({}); setTab("report"); setRefresh((n) => n + 1); }} />
+          <HistoryPanel refreshKey={refresh} onOpen={(m) => { setModel(m); setFiles({}); setSel({}); setTab("report"); }} />
           {model && (
             <div className="space-y-2 p-4">
               <input aria-label="Recherche" value={query} onChange={(e) => search(e.target.value)} placeholder="Fil 907-01+, signal, pin…" className="h-8 w-full border border-line bg-hover px-2.5" />
