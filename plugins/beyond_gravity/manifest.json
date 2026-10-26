@@ -1,0 +1,9 @@
+{
+  "id": "beyond_gravity",
+  "label": "Beyond Gravity",
+  "version": "0.1.0",
+  "inputs": [
+    {"role": "drawing", "label": "Plan de faisceau (DRW….pdf)", "accept": ".pdf"},
+    {"role": "bom", "label": "Nomenclature (PL_….pdf)", "accept": ".pdf"}
+  ]
+}

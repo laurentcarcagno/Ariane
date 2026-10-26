@@ -1,0 +1,25 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --deep: #12293a; --sky: #006eb1; --blue: #174082; --red: #c80a26;
+  --mist: #f0f7fc; --paper: #fcfdfe; --hover: #e6f3fa; --muted: #dbe7f0; --veil: #cee5fc; --line: #c2ddf0;
+  --ink: #001423; --dim: #43474c; --mute: #73777d;
+  --ok: #1f8a4c; --warn: #c68a00; --danger: #ba1a1a;
+  --ok-bg: #eaf6ee; --warn-bg: #fbf3dc; --danger-bg: #fbe9e9;
+}
+
+@layer base {
+  html, body { height: 100%; }
+  body { @apply bg-mist font-sans text-body text-ink; }
+  button, input, select { @apply rounded-none; }
+  :focus-visible { outline: 2px solid var(--sky); outline-offset: 1px; }
+}
+
+@layer components {
+  .label { @apply text-label font-bold uppercase tracking-[0.12em] text-dim; }
+  .btn { @apply h-8 px-3.5 text-label font-bold uppercase tracking-[0.12em] border border-line bg-paper text-deep hover:bg-hover disabled:opacity-50; }
+  .btn-primary { @apply btn border-sky bg-sky text-paper hover:bg-blue; }
+  .pill { @apply inline-flex items-center gap-1.5 px-2 py-0.5 text-label font-bold uppercase tracking-[0.08em]; }
+}
