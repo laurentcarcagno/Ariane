@@ -50,7 +50,9 @@ def decode_token(token: str, s: Settings, keys: KeyResolver) -> User:
     return User(claims["sub"], claims.get("preferred_username", claims["sub"]), str(customer), roles)
 
 
-def get_key_resolver(request: Request) -> KeyResolver:
+def get_key_resolver(request: Request) -> KeyResolver | None:
+    if request.app.state.settings.auth_disabled:  # no issuer configured in development: nothing to resolve
+        return None
     resolver = getattr(request.app.state, "key_resolver", None)
     if resolver is None:
         resolver = request.app.state.key_resolver = jwt.PyJWKClient(request.app.state.settings.jwks_url, cache_keys=True)
@@ -58,10 +60,10 @@ def get_key_resolver(request: Request) -> KeyResolver:
 
 
 async def current_user(request: Request, cred: HTTPAuthorizationCredentials | None = Depends(bearer),
-                       keys: KeyResolver = Depends(get_key_resolver)) -> User:
+                       keys: KeyResolver | None = Depends(get_key_resolver)) -> User:
     s: Settings = request.app.state.settings
     if s.auth_disabled:
         return User("dev", "dev", s.dev_customer, frozenset({"user", "admin"}))
-    if cred is None:
+    if cred is None or keys is None:
         raise _deny(401, "missing_token", "Authentication required")
     return await run_in_threadpool(decode_token, cred.credentials, s, keys)

@@ -43,8 +43,11 @@ export const CablageView = forwardRef<SVGSVGElement, Props>(function CablageView
   };
   const ext = new Map(blocks.map((c) => [c.id, extent(c)]));
   const all = [...ext.values()];
-  const vx = Math.min(...all.map((e) => e.x0)) - 20, vy = Math.min(...all.map((e) => e.y0)) - 20;
-  const vw = Math.max(...all.map((e) => e.x1)) - vx + 20, vh = Math.max(...all.map((e) => e.y1)) - vy + 20;
+  const sheetNo = String(model.topology?.pages?.schematic ?? blocks[0]?.page ?? 0);
+  const sheet = model.sheets?.[sheetNo];
+  // the whole sheet when known (strokes below the tables, notes and title block included), else the tables only
+  const vx = sheet ? 0 : Math.min(...all.map((e) => e.x0)) - 20, vy = sheet ? 0 : Math.min(...all.map((e) => e.y0)) - 20;
+  const vw = sheet ? sheet.width : Math.max(...all.map((e) => e.x1)) - vx + 20, vh = sheet ? sheet.height : Math.max(...all.map((e) => e.y1)) - vy + 20;
 
   const link = (() => {
     if (!wire?.to) return null;
@@ -56,15 +59,16 @@ export const CablageView = forwardRef<SVGSVGElement, Props>(function CablageView
     return { x1: ea.x1, y1: (ba.y0 + ba.y1) / 2, x2: eb.x0, y2: (bb.y0 + bb.y1) / 2 };
   })();
 
-  const sheet = model.topology?.pages?.schematic ?? blocks[0]?.page ?? 0;
   return (
     <ZoomPane ref={ref} viewBox={{ x: vx, y: vy, w: vw, h: vh }} label="Schéma de câblage (disposition de la feuille 2)">
       {/* original vector strokes of the sheet (tables, pair links, twisted-pair wires), under the text */}
       <g pointerEvents="none">
-        {(model.graphics?.[String(sheet)] ?? []).map((p, i) => (
+        {(model.graphics?.[sheetNo] ?? []).map((p, i) => (
           <path key={i} d={p.d} fill={p.f ?? "none"} stroke={p.c ?? "none"} strokeWidth={p.w} strokeLinecap="round" strokeLinejoin="round" />
         ))}
       </g>
+      {/* words outside the connector tables: frame letters, notes under the tables, title block */}
+      {sheet?.texts.map((t, i) => <Word key={i} c={t} fill="#43474c" />)}
       {blocks.map((c) => {
         const e = ext.get(c.id)!;
         const cflag = flags.connectors.get(c.id);

@@ -82,3 +82,33 @@ def test_should_refuse_plugin_not_enabled_for_customer(tmp_path, keys):
         r = c.post("/api/v1/imports", data={"plugin": "beyond_gravity"}, files={"drawing": ("a.pdf", b"%PDF"), "bom": ("b.pdf", b"%PDF")},
                    headers=bearer(keys, customer="acme"))
         assert r.status_code == 403
+
+
+@have_samples
+def test_should_export_xlsx_for_the_owner_only(tmp_path, keys):
+    import io
+    import json
+
+    from openpyxl import load_workbook
+    cfg = tmp_path / "customers.json"
+    cfg.write_text(json.dumps({"customers": {"beyond-gravity": {"label": "BG", "plugins": ["beyond_gravity"]},
+                                              "other": {"label": "O", "plugins": ["beyond_gravity"]}}}))
+    with make_client(tmp_path, keys, customers_config_path=cfg) as c:
+        mine = bearer(keys, customer="beyond-gravity")
+        imp = upload(c, mine).json()["id"]
+        r = c.get(f"/api/v1/imports/{imp}/export.xlsx", headers=mine)
+        assert r.status_code == 200 and "attachment" in r.headers["content-disposition"]
+        wb = load_workbook(io.BytesIO(r.content))
+        assert wb.sheetnames == ["From-To", "Connecteurs", "Segments", "Nomenclature", "Rapport"]
+        ft = wb["From-To"]
+        assert ft.max_row == 97 and ft["A2"].value == "907-01+"
+        assert c.get(f"/api/v1/imports/{imp}/export.xlsx", headers=bearer(keys, customer="other")).status_code == 404
+
+
+def test_should_serve_requests_without_any_oidc_setting_when_auth_is_disabled(tmp_path, keys):
+    """Regression: the dev setup (no issuer, no JWKS URL) must not try to build a JWKS client."""
+    s = make_client(tmp_path, keys, auth_disabled=True, oidc_issuer="")
+    s.app.state.key_resolver = None
+    with s as c:
+        assert c.get("/api/v1/me").json()["customer"] == "beyond-gravity"
+        assert c.get("/api/v1/plugins").status_code == 200

@@ -19,3 +19,4 @@ next-env.d.ts
 .next-dev.log
 data/
 uploads/
+.uvicorn-dev.log

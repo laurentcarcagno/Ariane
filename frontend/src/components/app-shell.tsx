@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
+import { downloadXlsx } from "@/lib/api";
 import { buildFlags, counts } from "@/lib/flags";
 import { exportCsv, exportJson, exportSvg } from "@/lib/export";
 import type { HarnessModel, Issue, Selection, SourceFiles } from "@/lib/types";
@@ -21,6 +22,8 @@ export function AppShell() {
   const [model, setModel] = useState<HarnessModel | null>(null);
   const [files, setFiles] = useState<SourceFiles>({});
   const [refresh, setRefresh] = useState(0);
+  const [importId, setImportId] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
   const { user, logout } = useSession();
   const [tab, setTab] = useState<Tab>("report");
   const [sel, setSel] = useState<Selection>({});
@@ -65,16 +68,19 @@ export function AppShell() {
       </header>
       <div className="flex min-h-0 flex-1">
         <aside className="w-[300px] shrink-0 overflow-y-auto border-r border-line bg-paper">
-          <ImportPanel onLoaded={(m, f) => { setModel(m); setFiles(f); setSel({}); setTab("report"); setRefresh((n) => n + 1); }} />
-          <HistoryPanel refreshKey={refresh} onOpen={(m) => { setModel(m); setFiles({}); setSel({}); setTab("report"); }} />
+          <ImportPanel onLoaded={(m, f, id) => { setModel(m); setFiles(f); setImportId(id); setSel({}); setTab("report"); setRefresh((n) => n + 1); }} />
+          <HistoryPanel refreshKey={refresh} onOpen={(m, id) => { setModel(m); setFiles({}); setImportId(id); setSel({}); setTab("report"); }} />
           {model && (
             <div className="space-y-2 p-4">
               <input aria-label="Recherche" value={query} onChange={(e) => search(e.target.value)} placeholder="Fil 907-01+, signal, pin…" className="h-8 w-full border border-line bg-hover px-2.5" />
               <div className="grid grid-cols-2 gap-2">
                 <button type="button" className="btn" onClick={() => exportCsv(model)}>CSV</button>
+                <button type="button" className="btn" disabled={!importId}
+                  onClick={() => { setExportError(null); if (importId) downloadXlsx(importId).catch((e: Error) => setExportError(e.message)); }}>Excel</button>
                 <button type="button" className="btn" onClick={() => exportJson(model)}>JSON</button>
                 <button type="button" className="btn col-span-2" disabled={tab !== "harness"} onClick={() => exportSvg(svgRef.current, "faisceau.svg")}>SVG de la vue</button>
               </div>
+              {exportError && <p role="alert" className="text-danger">{exportError}</p>}
             </div>
           )}
         </aside>

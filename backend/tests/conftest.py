@@ -38,7 +38,7 @@ def keys() -> FakeKeys:
 
 
 def make_client(tmp_path, keys: FakeKeys, **over) -> TestClient:
-    s = Settings(database_url=f"sqlite+aiosqlite:///{tmp_path / 't.db'}", oidc_issuer=ISSUER, _env_file=None, **over)
+    s = Settings(database_url=f"sqlite+aiosqlite:///{tmp_path / 't.db'}", **{"oidc_issuer": ISSUER, **over}, _env_file=None)
     app = create_app(s)
     app.state.key_resolver = keys
     return TestClient(app)

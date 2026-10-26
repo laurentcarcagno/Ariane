@@ -110,6 +110,13 @@ class GPath(BaseModel):
     f: str | None = None  # fill
 
 
+class Sheet(BaseModel):
+    """Size of a source sheet and the words not owned by any connector table (notes, title block...)."""
+    width: float
+    height: float
+    texts: list[Cell] = Field(default_factory=list)
+
+
 class HarnessModel(BaseModel):
     plugin: str
     partNumber: str | None = None
@@ -120,3 +127,4 @@ class HarnessModel(BaseModel):
     routes: dict[str, list[str]] = Field(default_factory=dict)
     issues: list[Issue] = Field(default_factory=list)
     graphics: dict[str, list[GPath]] = Field(default_factory=dict)  # page index -> vector paths
+    sheets: dict[str, Sheet] = Field(default_factory=dict)  # page index -> size and free text

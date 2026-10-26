@@ -5,7 +5,7 @@ from pathlib import Path
 
 from app.core.pdf.extract import extract_pdf
 from app.core.pdf.svgpath import page_paths
-from app.plugins.model import Box, Cell, Connector, Contact, Endpoint, HarnessModel, Issue, Wire
+from app.plugins.model import Box, Cell, Connector, Sheet, Contact, Endpoint, HarnessModel, Issue, Wire
 
 from .bom import parse_bom
 from .checks import capacity, conn_id, count_checks, crosscheck, label_checks
@@ -78,8 +78,14 @@ def parse(drawing: str | Path, bom: str | Path) -> HarnessModel:
     pairs = {w.pairId for w in wires}
     extra, stats = count_checks(res.blocks, len(wires), len(pairs), items)
     issues += extra
+    used = {(w.t, round(w.x0, 1), round(w.y0, 1)) for b in res.blocks for w in b.title}
+    for b in res.blocks:
+        for r in b.rows:
+            used |= {(w.t, round(w.x0, 1), round(w.y0, 1)) for w in (*r.row_words(), *([r.wire_word] if r.wire_word else []))}
+    free = [_cell(w) for w in sheet.words if (w.t, round(w.x0, 1), round(w.y0, 1)) not in used]
     model = HarnessModel(plugin=PLUGIN_ID, partNumber=part_no, connectors=connectors, wires=wires,
-                         bom=items, issues=issues, graphics={str(sheet.index): page_paths(sheet)})
+                         bom=items, issues=issues, graphics={str(sheet.index): page_paths(sheet)},
+                         sheets={str(sheet.index): Sheet(width=sheet.width, height=sheet.height, texts=free)})
     others = [p for p in pages if p is not sheet]
     diam_page = max(others, key=lambda p: sum(1 for w in p.words if w.t == "mm"), default=None)
     if diam_page is not None and not any(w.t == "mm" for w in diam_page.words):

@@ -3,6 +3,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.oidc import User, current_user
@@ -10,6 +11,7 @@ from app.config import Settings
 from app.database import get_db
 from app.plugins import registry
 from app.repositories.imports import ImportRepository
+from app.services.export_xlsx import build_workbook
 
 router = APIRouter(prefix="/api/v1")
 
@@ -90,6 +92,17 @@ async def get_import(import_id: str, user: User = Depends(current_user), db: Asy
     if rec is None:  # same answer for "absent" and "belongs to another customer"
         raise _err(404, "not_found", "Import not found")
     return {"id": rec.id, "model": rec.model}
+
+
+@router.get("/imports/{import_id}/export.xlsx")
+async def export_import(import_id: str, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)) -> Response:
+    rec = await ImportRepository(db, user.customer).get(import_id)
+    if rec is None:
+        raise _err(404, "not_found", "Import not found")
+    data = await run_in_threadpool(build_workbook, rec.model)
+    name = f"{rec.part_number or 'harness'}-from-to.xlsx"
+    return Response(data, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
 
 @router.delete("/imports/{import_id}", status_code=204)

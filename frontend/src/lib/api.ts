@@ -41,3 +41,13 @@ export async function importHarness(plugin: string, files: Record<string, File>)
   for (const [role, file] of Object.entries(files)) form.set(role, file);
   return parse(await call("/api/v1/imports", { method: "POST", body: form }));
 }
+
+/** Downloads the Excel workbook of a stored analysis (the bearer token rules out a plain link). */
+export async function downloadXlsx(id: string): Promise<void> {
+  const res = await call(`/api/v1/imports/${id}/export.xlsx`);
+  if (!res.ok) await parse(res);
+  const name = /filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") ?? "")?.[1] ?? "harness.xlsx";
+  const url = URL.createObjectURL(await res.blob());
+  Object.assign(document.createElement("a"), { href: url, download: name }).click();
+  URL.revokeObjectURL(url);
+}

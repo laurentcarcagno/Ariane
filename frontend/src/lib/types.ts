@@ -26,9 +26,11 @@ export interface TopoSegment {
 }
 export interface SheetPages { schematic: number; topology: number; diameters: number | null }
 export interface Topology { status: string; pages?: SheetPages; nodes?: TopoNode[]; segments?: TopoSegment[]; stats?: Record<string, unknown> }
+export interface Sheet { width: number; height: number; texts: Cell[] }
 export interface GPath { d: string; c: string | null; w: number; f: string | null }
 export interface HarnessModel {
   graphics?: Record<string, GPath[]>;
+  sheets?: Record<string, Sheet>;
   plugin: string; partNumber: string | null; connectors: Connector[]; wires: Wire[]; bom: BomItem[];
   topology: Topology | null; routes: Record<string, string[]>; issues: Issue[];
 }
