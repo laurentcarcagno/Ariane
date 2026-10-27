@@ -3,24 +3,22 @@
 import { useMemo, useRef, useState } from "react";
 import { buildFlags, counts } from "@/lib/flags";
 import { exportCsv, exportJson, exportSvg } from "@/lib/export";
-import type { HarnessModel, Issue, Selection, SourceFiles } from "@/lib/types";
+import type { HarnessModel, Issue, Selection } from "@/lib/types";
 import { CablageView } from "./cablage-view";
 import { useSession } from "./auth-gate";
 import { HistoryPanel } from "./history-panel";
 import { ConnectorsView } from "./connectors-view";
 import { ExportDialog } from "./export-dialog";
-import { DrawingView } from "./drawing-view";
 import { HarnessView } from "./harness-view";
 import { ImportPanel } from "./import-panel";
 import { InfoPanel } from "./info-panel";
 import { ReportView } from "./report-view";
 
-type Tab = "harness" | "connectors" | "cablage" | "drawing" | "report";
-const TABS: [Tab, string][] = [["harness", "Faisceau"], ["connectors", "Connecteurs"], ["cablage", "Câblage"], ["drawing", "Dessin"], ["report", "Rapport"]];
+type Tab = "harness" | "connectors" | "cablage" | "report";
+const TABS: [Tab, string][] = [["harness", "Faisceau"], ["connectors", "Connecteurs"], ["cablage", "Câblage"], ["report", "Rapport"]];
 
 export function AppShell() {
   const [model, setModel] = useState<HarnessModel | null>(null);
-  const [files, setFiles] = useState<SourceFiles>({});
   const [refresh, setRefresh] = useState(0);
   const [importId, setImportId] = useState<string | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
@@ -68,8 +66,8 @@ export function AppShell() {
       </header>
       <div className="flex min-h-0 flex-1">
         <aside className="w-[300px] shrink-0 overflow-y-auto border-r border-line bg-paper">
-          <ImportPanel onLoaded={(m, f, id) => { setModel(m); setFiles(f); setImportId(id); setSel({}); setTab("report"); setRefresh((n) => n + 1); }} />
-          <HistoryPanel refreshKey={refresh} onOpen={(m, id) => { setModel(m); setFiles({}); setImportId(id); setSel({}); setTab("report"); }} />
+          <ImportPanel onLoaded={(m, id) => { setModel(m); setImportId(id); setSel({}); setTab("report"); setRefresh((n) => n + 1); }} />
+          <HistoryPanel refreshKey={refresh} onOpen={(m, id) => { setModel(m); setImportId(id); setSel({}); setTab("report"); }} />
           {model && (
             <div className="space-y-2 p-4">
               <input aria-label="Recherche" value={query} onChange={(e) => search(e.target.value)} placeholder="Fil 907-01+, signal, pin…" className="h-8 w-full border border-line bg-hover px-2.5" />
@@ -102,8 +100,6 @@ export function AppShell() {
               <HarnessView ref={svgRef} model={model} flags={flags} sel={sel} onSelect={setSel} showLabels={labels} />
             ) : tab === "cablage" ? (
               <CablageView model={model} flags={flags} sel={sel} onSelect={setSel} />
-            ) : tab === "drawing" ? (
-              <DrawingView model={model} flags={flags} sel={sel} onSelect={setSel} file={files.drawing} />
             ) : tab === "connectors" ? (
               <ConnectorsView model={model} flags={flags} sel={sel} onSelect={setSel} filter={query} />
             ) : (

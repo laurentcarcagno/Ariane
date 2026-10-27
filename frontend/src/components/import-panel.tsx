@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { importHarness, listPlugins } from "@/lib/api";
-import type { HarnessModel, PluginInfo, SourceFiles } from "@/lib/types";
+import type { HarnessModel, PluginInfo } from "@/lib/types";
 
-export function ImportPanel({ onLoaded }: { onLoaded: (m: HarnessModel, files: SourceFiles, id: string) => void }) {
+export function ImportPanel({ onLoaded }: { onLoaded: (m: HarnessModel, id: string) => void }) {
   const [plugins, setPlugins] = useState<PluginInfo[]>([]);
   const [plugin, setPlugin] = useState("");
   const [files, setFiles] = useState<Record<string, File>>({});
@@ -19,7 +19,7 @@ export function ImportPanel({ onLoaded }: { onLoaded: (m: HarnessModel, files: S
   const run = async () => {
     setBusy(true);
     setError(null);
-    try { const r = await importHarness(plugin, files); onLoaded(r.model, { drawing: files.drawing, bom: files.bom }, r.id); } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
+    try { const r = await importHarness(plugin, files); onLoaded(r.model, r.id); } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
   };
 
   return (

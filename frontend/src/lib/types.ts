@@ -39,4 +39,3 @@ export interface PluginInfo { id: string; label: string; version: string; inputs
 /** What the user has picked; every view reads it, so a click anywhere highlights everywhere. */
 export interface Selection { conductorId?: string; conn?: string; pin?: string; segment?: string }
 
-export interface SourceFiles { drawing?: File; bom?: File }

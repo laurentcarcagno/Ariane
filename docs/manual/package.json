@@ -1,0 +1,8 @@
+{
+  "name": "ariane-manual",
+  "private": true,
+  "description": "Builds the ARIANE user manual (screenshots with Playwright, Word file with docx).",
+  "type": "module",
+  "scripts": { "capture": "node capture.mjs", "build": "node build.mjs" },
+  "devDependencies": { "docx": "9.0.2", "playwright": "1.49.1" }
+}
