@@ -11,7 +11,7 @@ from app.config import Settings
 from app.database import get_db
 from app.plugins import registry
 from app.repositories.imports import ImportRepository
-from app.services.export_xlsx import build_workbook
+from app.services.export_xlsx import ExportSettings, build_workbook
 
 router = APIRouter(prefix="/api/v1")
 
@@ -94,15 +94,27 @@ async def get_import(import_id: str, user: User = Depends(current_user), db: Asy
     return {"id": rec.id, "model": rec.model}
 
 
-@router.get("/imports/{import_id}/export.xlsx")
-async def export_import(import_id: str, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)) -> Response:
+async def _xlsx(import_id: str, request: Request, user: User, db: AsyncSession, settings: ExportSettings) -> Response:
     rec = await ImportRepository(db, user.customer).get(import_id)
     if rec is None:
         raise _err(404, "not_found", "Import not found")
-    data = await run_in_threadpool(build_workbook, rec.model)
+    cfg = request.app.state.customers.customers.get(user.customer)
+    data = await run_in_threadpool(build_workbook, rec.model, cfg.label if cfg else user.customer, user.username, settings)
     name = f"{rec.part_number or 'harness'}-from-to.xlsx"
     return Response(data, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     headers={"Content-Disposition": f'attachment; filename="{name}"'})
+
+
+@router.get("/imports/{import_id}/export.xlsx")
+async def export_import(import_id: str, request: Request, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)) -> Response:
+    return await _xlsx(import_id, request, user, db, ExportSettings())
+
+
+@router.post("/imports/{import_id}/export.xlsx")
+async def export_import_with_settings(import_id: str, settings: ExportSettings, request: Request, user: User = Depends(current_user),
+                                      db: AsyncSession = Depends(get_db)) -> Response:
+    """Same workbook, with the cover-page fields the user filled in."""
+    return await _xlsx(import_id, request, user, db, settings)
 
 
 @router.delete("/imports/{import_id}", status_code=204)

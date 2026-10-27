@@ -42,9 +42,17 @@ export async function importHarness(plugin: string, files: Record<string, File>)
   return parse(await call("/api/v1/imports", { method: "POST", body: form }));
 }
 
+/** Cover-page fields the PDFs cannot provide (client, reference and date are deduced by the server). */
+export interface ExportSettings {
+  edition: string; subtitle: string; classification: "" | "public" | "commercial" | "internal";
+  export_control: "" | "Not Listed/Not Controlled" | "Listed/Controlled";
+  quality_manager: string; project_manager: string; redactor: string;
+}
+export const EMPTY_SETTINGS: ExportSettings = { edition: "00", subtitle: "", classification: "", export_control: "", quality_manager: "", project_manager: "", redactor: "" };
+
 /** Downloads the Excel workbook of a stored analysis (the bearer token rules out a plain link). */
-export async function downloadXlsx(id: string): Promise<void> {
-  const res = await call(`/api/v1/imports/${id}/export.xlsx`);
+export async function downloadXlsx(id: string, settings: ExportSettings): Promise<void> {
+  const res = await call(`/api/v1/imports/${id}/export.xlsx`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(settings) });
   if (!res.ok) await parse(res);
   const name = /filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") ?? "")?.[1] ?? "harness.xlsx";
   const url = URL.createObjectURL(await res.blob());

@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { downloadXlsx } from "@/lib/api";
 import { buildFlags, counts } from "@/lib/flags";
 import { exportCsv, exportJson, exportSvg } from "@/lib/export";
 import type { HarnessModel, Issue, Selection, SourceFiles } from "@/lib/types";
@@ -9,6 +8,7 @@ import { CablageView } from "./cablage-view";
 import { useSession } from "./auth-gate";
 import { HistoryPanel } from "./history-panel";
 import { ConnectorsView } from "./connectors-view";
+import { ExportDialog } from "./export-dialog";
 import { DrawingView } from "./drawing-view";
 import { HarnessView } from "./harness-view";
 import { ImportPanel } from "./import-panel";
@@ -23,7 +23,7 @@ export function AppShell() {
   const [files, setFiles] = useState<SourceFiles>({});
   const [refresh, setRefresh] = useState(0);
   const [importId, setImportId] = useState<string | null>(null);
-  const [exportError, setExportError] = useState<string | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
   const { user, logout } = useSession();
   const [tab, setTab] = useState<Tab>("report");
   const [sel, setSel] = useState<Selection>({});
@@ -76,11 +76,10 @@ export function AppShell() {
               <div className="grid grid-cols-2 gap-2">
                 <button type="button" className="btn" onClick={() => exportCsv(model)}>CSV</button>
                 <button type="button" className="btn" disabled={!importId}
-                  onClick={() => { setExportError(null); if (importId) downloadXlsx(importId).catch((e: Error) => setExportError(e.message)); }}>Excel</button>
+                  onClick={() => setExportOpen(true)}>Excel…</button>
                 <button type="button" className="btn" onClick={() => exportJson(model)}>JSON</button>
                 <button type="button" className="btn col-span-2" disabled={tab !== "harness"} onClick={() => exportSvg(svgRef.current, "faisceau.svg")}>SVG de la vue</button>
               </div>
-              {exportError && <p role="alert" className="text-danger">{exportError}</p>}
             </div>
           )}
         </aside>
@@ -112,6 +111,7 @@ export function AppShell() {
             )}
           </div>
         </main>
+        {exportOpen && importId && <ExportDialog importId={importId} username={user?.username ?? ""} onClose={() => setExportOpen(false)} />}
         {model && flags && (
           <aside className="w-[340px] shrink-0 overflow-y-auto border-l border-line bg-paper">
             <InfoPanel model={model} flags={flags} sel={sel} onSelect={setSel} />
