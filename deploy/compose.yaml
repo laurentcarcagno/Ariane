@@ -1,0 +1,62 @@
+# ARIANE on Podman. Every site-specific value (URLs, network) comes from deploy/.env; use ./deploy.sh.
+# Keycloak, OpenBao and the reverse proxy are existing services reachable on the external network ${INFRA_NETWORK}.
+# Only PostgreSQL is ARIANE's own (no shared database server exists on the platform).
+services:
+  ariane-postgres:
+    image: docker.io/library/postgres:17
+    container_name: ariane-postgres
+    restart: always
+    mem_limit: 512m
+    memswap_limit: 512m
+    environment:
+      POSTGRES_USER: ariane
+      POSTGRES_DB: ariane
+      POSTGRES_PASSWORD: ${ARIANE_DB_PASSWORD:?run ./deploy.sh}
+    volumes:
+      - ariane_pg_data:/var/lib/postgresql/data
+
+  ariane-backend:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    image: localhost/ariane-backend:latest
+    container_name: ariane-backend
+    restart: always
+    mem_limit: 1g
+    memswap_limit: 1g
+    read_only: true                     # PDFs are parsed in /tmp, nothing else is written
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs: ["/tmp"]
+    depends_on: [ariane-postgres]
+    environment:
+      ARIANE_DATABASE_URL: postgresql+asyncpg://ariane:$${DB_PASSWORD}@ariane-postgres:5432/ariane
+      ARIANE_BAO_ADDR: ${OPENBAO_ADDR}
+      ARIANE_BAO_ROLE_ID: ${OPENBAO_ROLE_ID:?run ./deploy.sh openbao}
+      ARIANE_BAO_SECRET_ID: ${OPENBAO_SECRET_ID:?run ./deploy.sh openbao}
+      ARIANE_OIDC_ISSUER: ${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM:-infra}
+      ARIANE_OIDC_JWKS_URL: ${KEYCLOAK_INTERNAL_URL}/realms/${KEYCLOAK_REALM:-infra}/protocol/openid-connect/certs
+      ARIANE_OIDC_PUBLIC_AUTHORITY: ${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM:-infra}
+
+  ariane-frontend:
+    build:
+      context: ..
+      dockerfile: frontend/Dockerfile
+      args:
+        BACKEND_URL: http://ariane-backend:8000
+    image: localhost/ariane-frontend:latest
+    container_name: ariane-frontend
+    restart: always
+    mem_limit: 512m
+    memswap_limit: 512m
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    depends_on: [ariane-backend]
+
+volumes:
+  ariane_pg_data:
+
+networks:
+  default:
+    name: ${INFRA_NETWORK:-infra_default}
+    external: true
