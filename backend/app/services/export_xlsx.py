@@ -34,14 +34,17 @@ class ExportSettings(BaseModel):
     redactor: str = _Text
 
 
+COVER_SHEET = "Page de garde"
 HEAD_FILL = PatternFill("solid", fgColor="12293A")
 HEAD_FONT = Font(bold=True, color="FFFFFF")
 SEVERITY_FILL = {"error": PatternFill("solid", fgColor="FBE9E9"), "warning": PatternFill("solid", fgColor="FBF3DC")}
 
 
 BANNER_ROWS = 4
-HEAD_ROW = BANNER_ROWS + 1
-LOGO_PX = (261, 80)  # the REQMAP logo (509x156) scaled to the height of the four banner rows
+HEAD_ROW = BANNER_ROWS + 2  # one blank row between the banner and the table
+GUTTER = 2  # empty columns left of the tables: they hold the logo, so the banner looks the same whatever the table widths
+GUTTER_WIDTH = 14  # characters: 2 x 103 px
+LOGO_PX = (200, 61)  # the REQMAP logo (509x156) scaled to fit the gutter
 
 
 @dataclass
@@ -57,18 +60,15 @@ class Banner:
 def _banner(ws, banner: Banner, title: str) -> None:
     for r in range(1, BANNER_ROWS + 1):
         ws.row_dimensions[r].height = 20
+    for col in range(1, GUTTER + 1):
+        ws.column_dimensions[get_column_letter(col)].width = GUTTER_WIDTH
     if banner.logo:
         img = XLImage(BytesIO(banner.logo))
         img.width, img.height = LOGO_PX
         ws.add_image(img, "A1")
-    # first column that starts to the right of the logo (column widths are in characters, ~7 px each)
-    x, col = 0, 1
-    while x < LOGO_PX[0] + 12:
-        x += ws.column_dimensions[get_column_letter(col)].width * 7 + 5
-        col += 1
     for r, (text, bold) in enumerate([(title, True), (f"Réf : {banner.ref}", False), (f"Date : {banner.date}", False),
                                       (f"Édition : {banner.edition}", False)], 1):
-        c = ws.cell(r, col, text)
+        c = ws.cell(r, GUTTER + 1, text)  # starts right of the gutter and overflows over the empty cells
         if text.startswith("="):
             c.data_type = "s"
         c.font = Font(bold=bold, size=14 if bold else 10, color="12293A")
@@ -78,22 +78,23 @@ def _banner(ws, banner: Banner, title: str) -> None:
 def _sheet(wb: Workbook, title: str, head: list[str], rows: list[list], fills: list[PatternFill | None] | None = None, *,
            banner: Banner) -> None:
     ws = wb.create_sheet(title)
-    for _ in range(BANNER_ROWS):
+    pad = [None] * GUTTER
+    for _ in range(HEAD_ROW - 1):
         ws.append([None])
-    ws.append(head)
-    for c in ws[HEAD_ROW]:
+    ws.append(pad + head)
+    for c in ws[HEAD_ROW][GUTTER:]:
         c.fill, c.font = HEAD_FILL, HEAD_FONT
     for i, r in enumerate(rows):
-        ws.append(r)
+        ws.append(pad + r)
         if fills and fills[i]:
-            for c in ws[ws.max_row]:
+            for c in ws[ws.max_row][GUTTER:]:
                 c.fill = fills[i]
     for i, h in enumerate(head, 1):
         width = max([len(str(h))] + [len(str(r[i - 1])) for r in rows if i - 1 < len(r) and r[i - 1] is not None]) + 2
-        ws.column_dimensions[get_column_letter(i)].width = min(width, 70)
+        ws.column_dimensions[get_column_letter(i + GUTTER)].width = min(width, 70)
     _banner(ws, banner, f"Harness {banner.ref} — {title}")
     ws.freeze_panes = f"A{HEAD_ROW + 1}"
-    ws.auto_filter.ref = f"A{HEAD_ROW}:{get_column_letter(len(head))}{ws.max_row}"
+    ws.auto_filter.ref = f"{get_column_letter(GUTTER + 1)}{HEAD_ROW}:{get_column_letter(GUTTER + len(head))}{ws.max_row}"
     for row in ws.iter_rows(min_row=HEAD_ROW + 1):
         for c in row:
             c.alignment = Alignment(vertical="top", wrap_text=False)
@@ -116,10 +117,10 @@ def _cover(model: dict, customer: str, username: str, st: ExportSettings) -> tup
     for name in wb.sheetnames:
         if name != "HEADER":
             del wb[name]
-    for name in list(wb.defined_names):  # the other names pointed into the removed sheets
-        if not wb.defined_names[name].attr_text.startswith("HEADER!"):
-            del wb.defined_names[name]
+    for name in list(wb.defined_names):  # they pointed into the template's sheets, which are gone or renamed
+        del wb.defined_names[name]
     ws = wb["HEADER"]
+    ws.title = COVER_SHEET
     ws.sheet_view.view = "normal"  # the template opens in page-break preview, which prints a large "Page 1" over the sheet
     pn = model.get("partNumber") or ""
     _text(ws, "H2", customer)

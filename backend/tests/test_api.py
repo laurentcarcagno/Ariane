@@ -99,17 +99,18 @@ def test_should_export_xlsx_for_the_owner_only(tmp_path, keys):
         r = c.get(f"/api/v1/imports/{imp}/export.xlsx", headers=mine)
         assert r.status_code == 200 and "attachment" in r.headers["content-disposition"]
         wb = load_workbook(io.BytesIO(r.content))
-        assert wb.sheetnames == ["HEADER", "From-To", "Connecteurs", "Segments", "Nomenclature", "Rapport"]
-        assert wb["HEADER"]["H2"].value == "BG" and wb["HEADER"]["H9"].value == "3500402-907"
+        assert wb.sheetnames == ["Page de garde", "From-To", "Connecteurs", "Segments", "Nomenclature", "Rapport"]
+        assert wb["Page de garde"]["H2"].value == "BG" and wb["Page de garde"]["H9"].value == "3500402-907"
         ft = wb["From-To"]
-        assert ft.max_row == 101 and ft["A6"].value == "907-01+" and ft["A5"].value == "Fil"
+        assert ft.max_row == 102 and ft["C7"].value == "907-01+" and ft["C6"].value == "Fil" and ft["A5"].value is None
         banner = [c.value for r in ft.iter_rows(min_row=1, max_row=4) for c in r if c.value]
         assert banner[1:] == ["Réf : 3500402-907", f"Date : {__import__('datetime').date.today():%d/%m/%Y}", "Édition : 00"] and len(ft._images) == 1
         assert all(len(wb[n]._images) == 1 for n in wb.sheetnames[1:])
+        assert {wb[n]["C2"].value for n in wb.sheetnames[1:]} == {"Réf : 3500402-907"}  # same banner position on every sheet
         assert c.get(f"/api/v1/imports/{imp}/export.xlsx", headers=bearer(keys, customer="other")).status_code == 404
         r = c.post(f"/api/v1/imports/{imp}/export.xlsx", headers=mine,
                    json={"edition": "02", "classification": "internal", "quality_manager": "=1+1", "export_control": "Listed/Controlled"})
-        head = load_workbook(io.BytesIO(r.content))["HEADER"]
+        head = load_workbook(io.BytesIO(r.content))["Page de garde"]
         assert head["H11"].value == "02" and head["D10"].value.startswith("☒") and head["C10"].value.startswith("☐")
         assert head["D37"].value.startswith("=1+1") and head["D37"].data_type == "s" and "Listed/Controlled" in head["B53"].value
         assert head.sheet_view.view == "normal"
