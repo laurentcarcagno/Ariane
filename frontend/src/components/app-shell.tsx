@@ -110,7 +110,7 @@ export function AppShell() {
         {exportOpen && importId && <ExportDialog importId={importId} username={user?.username ?? ""} onClose={() => setExportOpen(false)} />}
         {model && flags && (
           <aside className="w-[340px] shrink-0 overflow-y-auto border-l border-line bg-paper">
-            <InfoPanel model={model} flags={flags} sel={sel} onSelect={setSel} />
+            <InfoPanel model={model} flags={flags} sel={sel} onSelect={setSel} importId={importId} onModel={setModel} />
           </aside>
         )}
       </div>

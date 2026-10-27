@@ -1,16 +1,31 @@
 # ARIANE
 
-Multi-customer wiring-harness tool: import a harness drawing and its parts list, rebuild the netlist and the
-topology, check them against each other, and browse the result (harness, connectors, wiring sheet, original
-drawing, report). Each customer is a **plugin**; the first one is **Beyond Gravity** (`plugins/beyond_gravity`).
+Multi-customer wiring-harness tool. It imports a harness drawing and its parts list (PDF), rebuilds the netlist and the
+topology, checks them against each other and shows the result in interactive views (harness, connectors, wiring sheet,
+report) and in an Excel export. Each customer is a **plugin**; the first one is **Beyond Gravity**
+(`plugins/beyond_gravity`).
 
-Everything is processed on your own servers: the PDFs are parsed in memory by the API and **not stored** (only the
-extracted model is), no CDN or external service is used at runtime.
+Rules the code keeps everywhere:
+
+* **Local only.** The PDFs are parsed in memory by the API and are not stored (only the extracted model is). No CDN, no
+  external service at runtime.
+* **Never invent a connection.** An ambiguity becomes an issue in the report; it is not corrected silently. The only
+  way to change the extracted data is an explicit user edit, which is logged (see [topology edits](docs/architecture.md#topology-edits)).
+* **Pin letters are case-sensitive** (`c` is not `C`).
+* **Customer isolation.** Every query is scoped to the customer of the signed-in user; another customer's data answers `404`.
+
+| Document | Content |
+|---|---|
+| [docs/architecture.md](docs/architecture.md) | Components, data model, request flow, security model |
+| [docs/plugin-guide.md](docs/plugin-guide.md) | How to write a customer plugin |
+| [docs/api.md](docs/api.md) | REST API reference |
+| [docs/operations.md](docs/operations.md) | Install, secrets, migrations, backup, upgrade, troubleshooting, production checklist |
+| [docs/manual/](docs/manual) | French user manual (Word) and the scripts that rebuild it |
 
 ## Run it (Docker)
 
 ```
-cp .env.example .env        # fill the four passwords
+cp .env.example .env        # fill the passwords
 docker compose up -d --build
 ```
 
@@ -20,33 +35,36 @@ Open `https://localhost` (Caddy internal CA: accept the certificate once). Sign 
 | Service | Role |
 |---|---|
 | caddy | TLS and single entry point: `/` UI, `/api` API, `/auth` Keycloak |
-| frontend | Next.js UI (OIDC code flow with PKCE) |
-| backend | FastAPI: token validation (JWKS), plugins, per-customer storage |
+| frontend | Next.js UI (OIDC code flow with PKCE, silent token renewal) |
+| backend | FastAPI: token validation (JWKS), plugins, per-customer storage, Alembic migrations at start-up |
 | postgres | `ariane` and `keycloak` databases, one owner each |
 | keycloak | realm `ariane` imported from `infra/keycloak/realm-ariane.json` |
 | openbao | KV v2 + AppRole; the API reads `secret/ariane` at start-up |
 
-## Customers and plugins
-
-* `config/customers.json` lists customers and the plugins each may use.
-* A user belongs to one customer through the `customer` attribute (admin-only in Keycloak), exposed as the `customer`
-  claim. Every query is filtered by it; another customer's data answers `404`.
-* A plugin is `plugins/<name>/` with a `manifest.json` and a `plugin.py` exposing `parse(drawing, bom) -> HarnessModel`
-  (`backend/app/plugins/model.py`). The UI only depends on that model.
-
 ## Develop
 
 ```
-cd backend  && pip install -r requirements.txt pytest && ARIANE_AUTH_DISABLED=true uvicorn app.main:app --port 8008
+cd backend  && pip install -r requirements.txt pytest && ARIANE_AUTH_DISABLED=true python -m uvicorn app.main:app --port 8008
 cd frontend && npm install && npm run dev      # proxies /api to http://localhost:8008
 cd backend  && python -m pytest                # sample PDFs (git-ignored) are needed for the harness tests
+cd frontend && npx tsc --noEmit && npx vitest run
 ```
 
-`ARIANE_AUTH_DISABLED=true` is for local development only.
+`ARIANE_AUTH_DISABLED=true` is for local development only: every request then runs as the customer `ARIANE_DEV_CUSTOMER`.
+
+End-to-end checks against the Docker stack (they need the sample PDFs and `npm install` in `docs/manual`):
+
+```
+cd docs/manual && node login-check.mjs     # Keycloak sign-in and sign-out
+cd docs/manual && node e2e-check.mjs       # sign-in, import, segment edit, expired token
+```
+
+## Database
+
+The schema is managed by Alembic (`backend/migrations`). The API upgrades to `head` at start-up. See
+[docs/operations.md](docs/operations.md#database-migrations) for adding a migration and for upgrading a database created by
+the prototype.
 
 ## Before production
 
-* OpenBao: `infra/openbao/init.sh` keeps a single unseal key in a volume so the stack restarts unattended. Use several
-  key shares held by different people and delete `/openbao/init`.
-* Keycloak: remove the dev user from the realm file, set real hostnames and redirect URIs (`https://localhost/*`).
-* Replace `create_all` with Alembic migrations before the first schema change.
+See the checklist in [docs/operations.md](docs/operations.md#production-checklist).

@@ -10,7 +10,7 @@ export interface Contact {
   dest?: string | null; origin?: string | null; wire?: string | null;
 }
 export interface Connector {
-  id: string; ref: string; partNumber: string; capacity: number | null; contacts: Contact[];
+  id: string; ref: string; partNumber: string; capacity: number | null; contacts: Contact[]; emptyPins?: string[] | null;
   page?: number | null; header?: Cell[];
 }
 export interface Endpoint { conn: string; pin: string }
@@ -24,8 +24,9 @@ export interface TopoNode { id: string; label: string | null; connector: string 
 export interface TopoSegment {
   id: string; a: string; b: string; diameterMm: number | null; bomItems: string[]; lengthPt: number; polyline: [number, number][];
 }
+export interface TopoEdit { segment: string; field: "diameterMm" | "bomItems"; before: unknown; after: unknown; by: string; at: string }
 export interface SheetPages { schematic: number; topology: number; diameters: number | null }
-export interface Topology { status: string; pages?: SheetPages; nodes?: TopoNode[]; segments?: TopoSegment[]; stats?: Record<string, unknown> }
+export interface Topology { status: string; pages?: SheetPages; nodes?: TopoNode[]; segments?: TopoSegment[]; stats?: Record<string, unknown>; edits?: TopoEdit[] }
 export interface Sheet { width: number; height: number; texts: Cell[] }
 export interface GPath { d: string; c: string | null; w: number; f: string | null }
 export interface HarnessModel {

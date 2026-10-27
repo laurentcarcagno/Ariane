@@ -68,6 +68,7 @@ class Connector(BaseModel):
     partNumber: str
     capacity: int | None = None
     contacts: list[Contact] = Field(default_factory=list)
+    emptyPins: list[str] | None = None  # unused places of the insert; None when the plugin does not know its pin layout
     page: int | None = None
     header: list[Cell] = Field(default_factory=list)  # title words ("S/C I #x-1 J01", part number) at their position
 

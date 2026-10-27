@@ -114,6 +114,12 @@ def test_should_export_xlsx_for_the_owner_only(tmp_path, keys):
         assert head["H11"].value == "02" and head["D10"].value.startswith("☒") and head["C10"].value.startswith("☐")
         assert head["D37"].value.startswith("=1+1") and head["D37"].data_type == "s" and "Listed/Controlled" in head["B53"].value
         assert head.sheet_view.view == "normal"
+        assert len(head.conditional_formatting) == 0  # no rule left that paints the placeholders yellow
+        assert head["H9"].fill.fill_type is None and head["B53"].fill.fill_type is None  # no yellow placeholder left
+        assert load_workbook(io.BytesIO(c.get(f"/api/v1/imports/{imp}/export.xlsx", headers=mine).content))["Page de garde"]["B53"].value is None
+        cx = load_workbook(io.BytesIO(r.content))["Connecteurs"]
+        empties = [row for row in cx.iter_rows(min_row=7, min_col=3, values_only=True) if row[4] == "place vide"]
+        assert sorted(row[2] for row in empties if row[0] == "S/C I #x-1 J01") == ["C", "F", "M"] and len(empties) == 18
         assert c.post(f"/api/v1/imports/{imp}/export.xlsx", headers=mine, json={"classification": "x"}).status_code == 422
         assert c.post(f"/api/v1/imports/{imp}/export.xlsx", headers=bearer(keys, customer="other"), json={}).status_code == 404
 
@@ -125,3 +131,73 @@ def test_should_serve_requests_without_any_oidc_setting_when_auth_is_disabled(tm
     with s as c:
         assert c.get("/api/v1/me").json()["customer"] == "beyond-gravity"
         assert c.get("/api/v1/plugins").status_code == 200
+
+
+@have_samples
+def test_should_name_the_empty_places_of_a_known_insert(dev_client):
+    model = upload(dev_client).json()["model"]
+    by_id = {c["id"]: c for c in model["connectors"]}
+    assert by_id["SC1"]["emptyPins"] == ["C", "F", "M"] and by_id["SC6"]["emptyPins"] == ["C", "F", "M"]
+    assert by_id["INIT_A_P1"]["emptyPins"] is None  # layout of the 61-contact insert is not known: count only
+
+
+@have_samples
+def test_should_edit_a_segment_and_keep_a_trace(tmp_path, keys):
+    import io
+
+    from openpyxl import load_workbook
+
+    with make_client(tmp_path, keys) as c:
+        mine = bearer(keys)
+        imp = upload(c, mine).json()
+        topo = imp["model"]["topology"]
+        seg = next(s for s in topo["segments"] if s["diameterMm"] is None)
+        before = {i["code"] for i in imp["model"]["issues"] if {"segment": seg["id"]} in [{k: v for k, v in r.items() if v} for r in i["refs"]]}
+        assert "diameter-missing" in before
+        url = f"/api/v1/imports/{imp['id']}/segments/{seg['id']}"
+        r = c.patch(url, headers=mine, json={"diameterMm": 2.5})
+        assert r.status_code == 200
+        model = r.json()["model"]
+        edited = next(s for s in model["topology"]["segments"] if s["id"] == seg["id"])
+        assert edited["diameterMm"] == 2.5
+        assert model["topology"]["edits"][0] | {"at": None} == {"segment": seg["id"], "field": "diameterMm", "before": None, "after": 2.5,
+                                                                 "by": "alice", "at": None}
+        codes = [i["code"] for i in model["issues"] if any(x.get("segment") == seg["id"] for x in i["refs"])]
+        assert "diameter-missing" not in codes and codes.count("topology-edited") == 1
+        assert c.get(f"/api/v1/imports/{imp['id']}", headers=mine).json()["model"]["topology"]["edits"]  # persisted
+        counts = c.get("/api/v1/imports", headers=mine).json()[0]  # the counters follow the edited model
+        assert counts["warnings"] == [i["severity"] for i in model["issues"]].count("warning")
+        x = load_workbook(io.BytesIO(c.get(f"/api/v1/imports/{imp['id']}/export.xlsx", headers=mine).content))["Segments"]
+        sources = {r[2]: r[8] for r in x.iter_rows(min_row=7, values_only=True)}
+        assert sources[seg["id"]] == "saisi" and list(sources.values()).count("plan") == len(sources) - 1
+        # refused: unknown segment, bad values, another customer
+        assert c.patch(f"/api/v1/imports/{imp['id']}/segments/S99", headers=mine, json={"diameterMm": 2}).status_code == 404
+        assert c.patch(url, headers=mine, json={"diameterMm": -1}).status_code == 422
+        assert c.patch(url, headers=mine, json={"bomItems": ["7"]}).status_code == 422
+        assert c.patch(url, headers=bearer(keys, customer="unknown-corp"), json={"diameterMm": 2}).status_code in (403, 404)
+
+
+def test_should_migrate_a_prototype_database_and_a_new_one(tmp_path):
+    import sqlite3
+    from alembic import command
+    from alembic.config import Config
+    from sqlalchemy import create_engine, inspect
+
+    def upgrade(db):
+        cfg = Config(str(ROOT / "backend" / "alembic.ini"))
+        cfg.set_main_option("script_location", str(ROOT / "backend" / "migrations"))
+        cfg.set_main_option("sqlalchemy.url", f"sqlite+aiosqlite:///{db}")
+        command.upgrade(cfg, "head")
+        return {c["name"] for c in inspect(create_engine(f"sqlite:///{db}")).get_columns("imports")}
+
+    fresh = tmp_path / "fresh.db"
+    assert "updated_at" in upgrade(fresh)
+    old = tmp_path / "old.db"  # what create_all produced before Alembic
+    con = sqlite3.connect(old)
+    con.execute("create table imports (id varchar(36) primary key, customer_id varchar(64), plugin varchar(64), created_by varchar(128),"
+                " created_at datetime, drawing_name varchar(255), bom_name varchar(255), part_number varchar(64), errors int,"
+                " warnings int, model json)")
+    con.execute("insert into imports values ('a','bg','p','u','2026-01-01','d','b','pn',0,0,'{}')")
+    con.commit(); con.close()
+    assert "updated_at" in upgrade(old)
+    assert sqlite3.connect(old).execute("select id from imports").fetchall() == [("a",)]

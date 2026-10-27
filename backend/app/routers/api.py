@@ -12,6 +12,7 @@ from app.database import get_db
 from app.plugins import registry
 from app.repositories.imports import ImportRepository
 from app.services.export_xlsx import ExportSettings, build_workbook
+from app.services.topology_edit import SegmentEdit, UnknownSegment, edit_segment
 
 router = APIRouter(prefix="/api/v1")
 
@@ -92,6 +93,24 @@ async def get_import(import_id: str, user: User = Depends(current_user), db: Asy
     if rec is None:  # same answer for "absent" and "belongs to another customer"
         raise _err(404, "not_found", "Import not found")
     return {"id": rec.id, "model": rec.model}
+
+
+@router.patch("/imports/{import_id}/segments/{segment_id}")
+async def edit_import_segment(import_id: str, segment_id: str, edit: SegmentEdit, user: User = Depends(current_user),
+                              db: AsyncSession = Depends(get_db)) -> dict:
+    """Fill in what the topology sheets did not give (diameter, BOM items); the edit is logged in the model."""
+    repo = ImportRepository(db, user.customer)
+    rec = await repo.get(import_id)
+    if rec is None:
+        raise _err(404, "not_found", "Import not found")
+    try:
+        model = edit_segment(rec.model, segment_id, edit, user.username)
+    except UnknownSegment:
+        raise _err(404, "segment_not_found", f"Segment {segment_id!r} does not exist") from None
+    except ValueError as exc:
+        raise _err(422, "bad_edit", str(exc)) from exc
+    await repo.update_model(import_id, model)
+    return {"id": import_id, "model": model}
 
 
 async def _xlsx(import_id: str, request: Request, user: User, db: AsyncSession, settings: ExportSettings) -> Response:

@@ -1,4 +1,4 @@
-import { accessToken } from "./auth";
+import { accessToken, reauthenticate } from "./auth";
 import type { HarnessModel, PluginInfo } from "./types";
 
 export class ApiError extends Error {
@@ -15,7 +15,9 @@ async function call(url: string, init: RequestInit = {}): Promise<Response> {
   const token = accessToken();
   const headers = new Headers(init.headers);
   if (token) headers.set("Authorization", `Bearer ${token}`);
-  return fetch(url, { ...init, headers });
+  const res = await fetch(url, { ...init, headers });
+  if (res.status === 401 && token) await reauthenticate(); // navigates away; the call below never resolves into the UI
+  return res;
 }
 
 async function parse<T>(res: Response): Promise<T> {
@@ -40,6 +42,12 @@ export async function importHarness(plugin: string, files: Record<string, File>)
   form.set("plugin", plugin);
   for (const [role, file] of Object.entries(files)) form.set(role, file);
   return parse(await call("/api/v1/imports", { method: "POST", body: form }));
+}
+
+/** Fills in what the topology sheets did not give; the server logs the edit and returns the updated model. */
+export async function editSegment(id: string, segment: string, edit: { diameterMm?: number; bomItems?: string[] }): Promise<HarnessModel> {
+  const res = await call(`/api/v1/imports/${id}/segments/${segment}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(edit) });
+  return (await parse<{ model: HarnessModel }>(res)).model;
 }
 
 /** Cover-page fields the PDFs cannot provide (client, reference and date are deduced by the server). */

@@ -11,6 +11,7 @@ from pathlib import Path
 
 from openpyxl import Workbook, load_workbook
 from openpyxl.drawing.image import Image as XLImage
+from openpyxl.formatting.formatting import ConditionalFormattingList
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from pydantic import BaseModel, Field
@@ -37,6 +38,7 @@ class ExportSettings(BaseModel):
 COVER_SHEET = "Page de garde"
 HEAD_FILL = PatternFill("solid", fgColor="12293A")
 HEAD_FONT = Font(bold=True, color="FFFFFF")
+EMPTY_FILL = PatternFill("solid", fgColor="EEF1F4")
 SEVERITY_FILL = {"error": PatternFill("solid", fgColor="FBE9E9"), "warning": PatternFill("solid", fgColor="FBF3DC")}
 
 
@@ -142,8 +144,10 @@ def _cover(model: dict, customer: str, username: str, st: ExportSettings) -> tup
                             ("D47", st.redactor.strip() or username, "")):
         if name.strip():
             _text(ws, ref, "\n".join(p for p in (name.strip(), role) if p))
-    if st.export_control:
-        ws["B53"] = f"EXPORT CONTROL STATUS: {st.export_control}"
+    ws["B53"] = f"EXPORT CONTROL STATUS: {st.export_control}" if st.export_control else None  # the template text is a placeholder
+    ws.conditional_formatting = ConditionalFormattingList()  # the template turns a placeholder yellow until it is edited
+    for ref in ("H9", "B53"):  # ... and two fill-in cells are yellow by default
+        ws[ref].fill = PatternFill(fill_type=None)
     return wb, logo
 
 
@@ -154,6 +158,7 @@ def build_workbook(model: dict, customer: str = "", username: str = "", settings
     sheet = partial(_sheet, wb, banner=banner)
     flagged = {(r.get("conn"), r.get("pin")) for i in model["issues"] if i["severity"] == "error" for r in i["refs"] if r.get("pin")}
     segs = {s["id"]: s for s in (model.get("topology") or {}).get("segments", [])}
+    edited = {e["segment"] for e in (model.get("topology") or {}).get("edits", [])}
 
     rows, fills = [], []
     for w in sorted(model["wires"], key=lambda w: w["conductorId"]):
@@ -174,10 +179,14 @@ def build_workbook(model: dict, customer: str = "", username: str = "", settings
             bad = (c["id"], k["pin"]) in flagged
             rows.append([c["ref"], c["partNumber"], k["pin"], ", ".join(k["wireIds"]), k.get("origin") or k.get("dest"), k.get("wire")])
             fills.append(SEVERITY_FILL["error"] if bad else None)
+        for pin in c.get("emptyPins") or []:
+            rows.append([c["ref"], c["partNumber"], pin, "", "place vide", None])
+            fills.append(EMPTY_FILL)
     sheet("Connecteurs", ["Connecteur", "Référence", "Pin", "Fils", "Origine / destination (plan)", "N° fil (plan)"], rows, fills)
 
-    sheet("Segments", ["Segment", "Nœud A", "Nœud B", "Ø (mm)", "Repères nomenclature", "Longueur (pt plan)"],
-           [[s["id"], s["a"], s["b"], s["diameterMm"], " / ".join(s["bomItems"]), s["lengthPt"]] for s in segs.values()])
+    sheet("Segments", ["Segment", "Nœud A", "Nœud B", "Ø (mm)", "Repères nomenclature", "Longueur (pt plan)", "Source"],
+           [[s["id"], s["a"], s["b"], s["diameterMm"], " / ".join(s["bomItems"]), s["lengthPt"],
+             "saisi" if s["id"] in edited else "plan"] for s in segs.values()])
     sheet("Nomenclature", ["Pos", "Référence", "Description", "Quantité", "Unité", "Notes", "TBD"],
            [[b["position"], b["partNumber"], b["description"], b["amount"], b["unit"], b["notes"], "oui" if b["tbd"] else ""] for b in model["bom"]])
     order = {"error": 0, "warning": 1, "info": 2}

@@ -1,9 +1,51 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { editSegment } from "@/lib/api";
 import { pinKey, type Flags } from "@/lib/flags";
-import type { HarnessModel, Selection } from "@/lib/types";
+import type { HarnessModel, Selection, TopoSegment } from "@/lib/types";
 
-export function InfoPanel({ model, flags, sel, onSelect }: { model: HarnessModel; flags: Flags; sel: Selection; onSelect: (s: Selection) => void }) {
+interface Props {
+  model: HarnessModel; flags: Flags; sel: Selection; onSelect: (s: Selection) => void;
+  importId: string | null; onModel: (m: HarnessModel) => void;
+}
+
+/** Fill in a diameter or BOM items the topology sheets did not give. The server keeps a trace of every edit. */
+function SegmentEditor({ seg, model, importId, onModel }: { seg: TopoSegment; model: HarnessModel; importId: string; onModel: (m: HarnessModel) => void }) {
+  const [diam, setDiam] = useState("");
+  const [items, setItems] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { setDiam(seg.diameterMm?.toString() ?? ""); setItems(seg.bomItems.join(" ")); setError(""); }, [seg.id, seg.diameterMm, seg.bomItems]);
+  const last = [...(model.topology?.edits ?? [])].reverse().find((e) => e.segment === seg.id);
+
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const edit: { diameterMm?: number; bomItems?: string[] } = {};
+    if (diam.trim() !== "" && Number(diam.replace(",", ".")) !== seg.diameterMm) edit.diameterMm = Number(diam.replace(",", "."));
+    const list = items.split(/[\s,/]+/).filter(Boolean);
+    if (list.join(" ") !== seg.bomItems.join(" ")) edit.bomItems = list;
+    if (Object.keys(edit).length === 0) { setError("Rien à enregistrer."); return; }
+    setBusy(true); setError("");
+    try { onModel(await editSegment(importId, seg.id, edit)); } catch (err) { setError((err as Error).message); } finally { setBusy(false); }
+  };
+  return (
+    <form onSubmit={save} className="mt-3 space-y-2 border border-line bg-hover p-3">
+      <div className="label">Corriger ce segment</div>
+      <label className="flex items-center justify-between gap-2"><span>Diamètre (mm)</span>
+        <input aria-label="Diamètre" inputMode="decimal" value={diam} onChange={(e) => setDiam(e.target.value)} className="h-8 w-24 border border-line bg-paper px-2 text-right font-mono" /></label>
+      <label className="flex items-center justify-between gap-2"><span>Repères nomenclature</span>
+        <input aria-label="Repères" value={items} onChange={(e) => setItems(e.target.value)} placeholder="07 08" className="h-8 w-28 border border-line bg-paper px-2 font-mono" /></label>
+      {error && <p className="text-danger">{error}</p>}
+      <div className="flex items-center justify-between gap-2">
+        <button type="submit" className="btn" disabled={busy}>Enregistrer</button>
+        {last && <span className="text-label text-mute">saisi par {last.by}</span>}
+      </div>
+    </form>
+  );
+}
+
+export function InfoPanel({ model, flags, sel, onSelect, importId, onModel }: Props) {
   const wire = model.wires.find((w) => w.conductorId === sel.conductorId);
   const segs = new Map((model.topology?.segments ?? []).map((s) => [s.id, s]));
   const same = sel.conn && sel.pin
@@ -29,6 +71,7 @@ export function InfoPanel({ model, flags, sel, onSelect }: { model: HarnessModel
             {row("Diamètre", seg.diameterMm !== null ? `Ø ${seg.diameterMm} mm` : "non renseigné")}
             {row("Repères", seg.bomItems.join(" / ") || "–")}
           </dl>
+          {importId && <SegmentEditor seg={seg} model={model} importId={importId} onModel={onModel} />}
           {segFlag && <ul className="mt-2 list-disc border border-warn bg-warn-bg p-3 pl-7 text-warn">{segFlag.issues.map((i, k) => <li key={k}>{i.message}</li>)}</ul>}
         </div>
       )}
@@ -70,7 +113,7 @@ export function InfoPanel({ model, flags, sel, onSelect }: { model: HarnessModel
                   const f = flags.segments.get(id);
                   return (
                     <li key={id} className="flex items-center justify-between gap-2 border-b border-line px-2 py-1 font-mono last:border-0">
-                      <span>{s ? `${s.a} → ${s.b}` : id}</span>
+                      <button type="button" className="text-left underline" title="Voir et corriger ce segment" onClick={() => onSelect({ ...sel, segment: id })}>{s ? `${s.a} → ${s.b}` : id}</button>
                       <span className={f ? "text-warn" : "text-dim"}>
                         {s?.diameterMm != null ? `Ø${s.diameterMm}` : "Ø ?"}{s?.bomItems.length ? ` · ${s.bomItems.join("/")}` : ""}{f ? " ⚠" : ""}
                       </span>

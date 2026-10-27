@@ -19,13 +19,19 @@ const COLOR = { base: "#12293a", route: "#006eb1", error: "#c80a26", warn: "#c68
 export const HarnessView = forwardRef<SVGSVGElement, Props>(function HarnessView({ model, flags, sel, onSelect, showLabels }, ref) {
   const topo = model.topology;
   const wire = model.wires.find((w) => w.conductorId === sel.conductorId);
-  const routeIds = useMemo(() => new Set(wire ? model.routes[wire.pairId] ?? [] : []), [wire, model.routes]);
+  // a selected wire gives its own route; a selected connector gives the routes of every wire that ends on it
+  const touched = useMemo(() => {
+    if (wire) return [wire];
+    if (!sel.conn) return [];
+    return model.wires.filter((w) => w.from.conn === sel.conn || w.to?.conn === sel.conn);
+  }, [wire, sel.conn, model.wires]);
+  const routeIds = useMemo(() => new Set(touched.flatMap((w) => model.routes[w.pairId] ?? [])), [touched, model.routes]);
   const routeNodes = useMemo(() => {
     const s = new Set<string>();
     for (const seg of topo?.segments ?? []) if (routeIds.has(seg.id)) { s.add(seg.a); s.add(seg.b); }
     return s;
   }, [topo, routeIds]);
-  const endKeys = useMemo(() => new Set(wire ? [topoKey(wire.from.conn), wire.to ? topoKey(wire.to.conn) : ""] : []), [wire]);
+  const endKeys = useMemo(() => new Set(touched.flatMap((w) => [topoKey(w.from.conn), w.to ? topoKey(w.to.conn) : ""])), [touched]);
 
   if (!topo || topo.status !== "ok" || !topo.nodes || !topo.segments) {
     return <p className="p-6 text-dim">Topologie non extraite : voir le rapport de contrôle.</p>;

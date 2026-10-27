@@ -18,6 +18,7 @@ class ImportRecord(Base):
     plugin: Mapped[str] = mapped_column(String(64))
     created_by: Mapped[str] = mapped_column(String(128))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     drawing_name: Mapped[str] = mapped_column(String(255))
     bom_name: Mapped[str] = mapped_column(String(255))
     part_number: Mapped[str | None] = mapped_column(String(64), nullable=True)

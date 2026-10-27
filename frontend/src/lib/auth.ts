@@ -23,9 +23,11 @@ export async function signIn(cfg: PublicConfig): Promise<User | null> {
     post_logout_redirect_uri: `${window.location.origin}/`,
     response_type: "code",
     scope: "openid profile email",
-    automaticSilentRenew: false,
+    automaticSilentRenew: true, // refresh-token grant shortly before the access token expires
     userStore: new WebStorageStateStore({ store: window.sessionStorage }),
   });
+  manager.events.addUserLoaded((u) => { current = u; });
+  manager.events.addSilentRenewError(() => void reauthenticate());
   const params = new URLSearchParams(window.location.search);
   if (params.has("code") && params.has("state")) {
     current = await manager.signinRedirectCallback();
@@ -41,4 +43,11 @@ export async function signIn(cfg: PublicConfig): Promise<User | null> {
 export async function signOut(): Promise<void> {
   current = null;
   await manager?.signoutRedirect();
+}
+
+/** The token was refused (expired, session ended): go through the login page again; the SSO session usually makes it instant. */
+export async function reauthenticate(): Promise<void> {
+  current = null;
+  await manager?.removeUser();
+  await manager?.signinRedirect();
 }

@@ -8,6 +8,7 @@ from app.core.pdf.svgpath import page_paths
 from app.plugins.model import Box, Cell, Connector, Sheet, Contact, Endpoint, HarnessModel, Issue, Wire
 
 from .bom import parse_bom
+from .inserts import empty_pins
 from .checks import capacity, conn_id, count_checks, crosscheck, label_checks
 from .netlist import SRC_ANCHOR, parse_schematic
 from .topology import extract_topology, route_wires
@@ -49,6 +50,7 @@ def parse(drawing: str | Path, bom: str | Path) -> HarnessModel:
                     for r in b.rows if r.pin is not None]
         connectors.append(Connector(id=cid, ref=b.name, partNumber=b.part_number,
                                     capacity=capacity(b.part_number), contacts=contacts,
+                                    emptyPins=empty_pins(b.part_number, [c.pin for c in contacts], capacity(b.part_number)),
                                     page=b.header.page, header=[_cell(w) for w in b.title]))
         if b.kind != "src":
             continue

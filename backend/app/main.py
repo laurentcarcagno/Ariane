@@ -3,7 +3,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.config import Settings, get_settings
-from app.database import Base, make_sessionmaker
+from app import migrate
+from app.database import make_sessionmaker
 from app.routers import api
 from app.services.customers import load_customers
 from app.services.secrets import fetch_secrets, resolve_database_url
@@ -17,9 +18,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         secrets = fetch_secrets(s)
         engine, maker = make_sessionmaker(resolve_database_url(s, secrets))
         app.state.sessionmaker = maker
-        async with engine.begin() as conn:  # prototype: create tables; Alembic comes with the first schema change
-            from app import models  # noqa: F401  (register tables)
-            await conn.run_sync(Base.metadata.create_all)
+        async with engine.begin() as conn:
+            await conn.run_sync(migrate.upgrade)
         yield
         await engine.dispose()
 

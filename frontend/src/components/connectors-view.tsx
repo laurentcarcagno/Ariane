@@ -58,7 +58,16 @@ export function ConnectorsView({ model, flags, sel, onSelect, filter }: Props) {
                 );
               })}
             </div>
-            {empty > 0 && <p className="border-t border-line px-3 py-1.5 text-label text-mute">{empty} places vides (à combler par des pins, note 5)</p>}
+            {empty > 0 && (
+              <div className="border-t border-line px-3 py-2 text-label text-mute">
+                {c.emptyPins?.length ? (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span>{empty} places vides (à combler, note 5) :</span>
+                    {c.emptyPins.map((p) => <span key={p} className="inline-flex h-6 min-w-6 items-center justify-center border border-dashed border-line px-1 font-mono text-ink" title={`${c.id}:${p} (place vide)`}>{p}</span>)}
+                  </div>
+                ) : <>{empty} places vides (à combler par des pins, note 5)</>}
+              </div>
+            )}
           </section>
         );
       })}

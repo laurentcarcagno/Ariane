@@ -41,6 +41,16 @@ await page.getByText("duplicate-destination").first().click();
 await page.waitForTimeout(1500);
 await shot(page, "08-erreur");
 
+// Empty places of the first S/C block, then a segment without diameter opened from the report (the editor, not saved)
+await page.getByRole("tab", { name: "Connecteurs" }).click();
+await page.waitForTimeout(800);
+await page.locator("main section").first().screenshot({ path: path.join(here, "img", "12-places-vides.png") });
+await page.getByRole("tab", { name: "Rapport" }).click();
+await page.getByText("diameter-missing").first().click();
+await page.getByLabel("Diamètre").waitFor();
+await page.waitForTimeout(1200);
+await shot(page, "13-editeur");
+
 // Search a wire, then show it in the connectors view with the info panel
 await page.getByRole("tab", { name: "Connecteurs" }).click();
 await page.getByLabel("Recherche").fill("907-01+");

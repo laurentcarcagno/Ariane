@@ -20,3 +20,6 @@ next-env.d.ts
 data/
 uploads/
 .uvicorn-dev.log
+
+# office lock files
+~$*
