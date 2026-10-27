@@ -102,7 +102,10 @@ def test_should_export_xlsx_for_the_owner_only(tmp_path, keys):
         assert wb.sheetnames == ["HEADER", "From-To", "Connecteurs", "Segments", "Nomenclature", "Rapport"]
         assert wb["HEADER"]["H2"].value == "BG" and wb["HEADER"]["H9"].value == "3500402-907"
         ft = wb["From-To"]
-        assert ft.max_row == 97 and ft["A2"].value == "907-01+"
+        assert ft.max_row == 101 and ft["A6"].value == "907-01+" and ft["A5"].value == "Fil"
+        banner = [c.value for r in ft.iter_rows(min_row=1, max_row=4) for c in r if c.value]
+        assert banner[1:] == ["Réf : 3500402-907", f"Date : {__import__('datetime').date.today():%d/%m/%Y}", "Édition : 00"] and len(ft._images) == 1
+        assert all(len(wb[n]._images) == 1 for n in wb.sheetnames[1:])
         assert c.get(f"/api/v1/imports/{imp}/export.xlsx", headers=bearer(keys, customer="other")).status_code == 404
         r = c.post(f"/api/v1/imports/{imp}/export.xlsx", headers=mine,
                    json={"edition": "02", "classification": "internal", "quality_manager": "=1+1", "export_control": "Listed/Controlled"})

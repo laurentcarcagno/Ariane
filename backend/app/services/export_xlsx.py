@@ -2,12 +2,15 @@
 from __future__ import annotations
 
 from copy import copy
+from dataclasses import dataclass
 from datetime import date
 from typing import Literal
+from functools import partial
 from io import BytesIO
 from pathlib import Path
 
 from openpyxl import Workbook, load_workbook
+from openpyxl.drawing.image import Image as XLImage
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from pydantic import BaseModel, Field
@@ -36,10 +39,49 @@ HEAD_FONT = Font(bold=True, color="FFFFFF")
 SEVERITY_FILL = {"error": PatternFill("solid", fgColor="FBE9E9"), "warning": PatternFill("solid", fgColor="FBF3DC")}
 
 
-def _sheet(wb: Workbook, title: str, head: list[str], rows: list[list], fills: list[PatternFill | None] | None = None) -> None:
+BANNER_ROWS = 4
+HEAD_ROW = BANNER_ROWS + 1
+LOGO_PX = (261, 80)  # the REQMAP logo (509x156) scaled to the height of the four banner rows
+
+
+@dataclass
+class Banner:
+    """The 4-line header of the data sheets: logo, title, reference, date, edition."""
+
+    logo: bytes | None
+    ref: str
+    date: str
+    edition: str
+
+
+def _banner(ws, banner: Banner, title: str) -> None:
+    for r in range(1, BANNER_ROWS + 1):
+        ws.row_dimensions[r].height = 20
+    if banner.logo:
+        img = XLImage(BytesIO(banner.logo))
+        img.width, img.height = LOGO_PX
+        ws.add_image(img, "A1")
+    # first column that starts to the right of the logo (column widths are in characters, ~7 px each)
+    x, col = 0, 1
+    while x < LOGO_PX[0] + 12:
+        x += ws.column_dimensions[get_column_letter(col)].width * 7 + 5
+        col += 1
+    for r, (text, bold) in enumerate([(title, True), (f"Réf : {banner.ref}", False), (f"Date : {banner.date}", False),
+                                      (f"Édition : {banner.edition}", False)], 1):
+        c = ws.cell(r, col, text)
+        if text.startswith("="):
+            c.data_type = "s"
+        c.font = Font(bold=bold, size=14 if bold else 10, color="12293A")
+        c.alignment = Alignment(vertical="center")
+
+
+def _sheet(wb: Workbook, title: str, head: list[str], rows: list[list], fills: list[PatternFill | None] | None = None, *,
+           banner: Banner) -> None:
     ws = wb.create_sheet(title)
+    for _ in range(BANNER_ROWS):
+        ws.append([None])
     ws.append(head)
-    for c in ws[1]:
+    for c in ws[HEAD_ROW]:
         c.fill, c.font = HEAD_FILL, HEAD_FONT
     for i, r in enumerate(rows):
         ws.append(r)
@@ -49,9 +91,10 @@ def _sheet(wb: Workbook, title: str, head: list[str], rows: list[list], fills: l
     for i, h in enumerate(head, 1):
         width = max([len(str(h))] + [len(str(r[i - 1])) for r in rows if i - 1 < len(r) and r[i - 1] is not None]) + 2
         ws.column_dimensions[get_column_letter(i)].width = min(width, 70)
-    ws.freeze_panes = "A2"
-    ws.auto_filter.ref = ws.dimensions
-    for row in ws.iter_rows(min_row=2):
+    _banner(ws, banner, f"Harness {banner.ref} — {title}")
+    ws.freeze_panes = f"A{HEAD_ROW + 1}"
+    ws.auto_filter.ref = f"A{HEAD_ROW}:{get_column_letter(len(head))}{ws.max_row}"
+    for row in ws.iter_rows(min_row=HEAD_ROW + 1):
         for c in row:
             c.alignment = Alignment(vertical="top", wrap_text=False)
 
@@ -62,13 +105,14 @@ def _text(ws, ref: str, value: str) -> None:
         ws[ref].data_type = "s"
 
 
-def _cover(model: dict, customer: str, username: str, st: ExportSettings) -> Workbook:
+def _cover(model: dict, customer: str, username: str, st: ExportSettings) -> tuple[Workbook, bytes | None]:
     """The template's HEADER sheet, filled from the model and the settings; empty workbook without the template."""
     if not HEADER_TEMPLATE.exists():
         wb = Workbook()
         wb.remove(wb.active)
-        return wb
+        return wb, None
     wb = load_workbook(HEADER_TEMPLATE)
+    logo = wb["REQUIREMENTS"]._images[0]._data()  # the wide logo the template uses on its data sheets
     for name in wb.sheetnames:
         if name != "HEADER":
             del wb[name]
@@ -99,11 +143,14 @@ def _cover(model: dict, customer: str, username: str, st: ExportSettings) -> Wor
             _text(ws, ref, "\n".join(p for p in (name.strip(), role) if p))
     if st.export_control:
         ws["B53"] = f"EXPORT CONTROL STATUS: {st.export_control}"
-    return wb
+    return wb, logo
 
 
 def build_workbook(model: dict, customer: str = "", username: str = "", settings: ExportSettings | None = None) -> bytes:
-    wb = _cover(model, customer, username, settings or ExportSettings())
+    st = settings or ExportSettings()
+    wb, logo = _cover(model, customer, username, st)
+    banner = Banner(logo, model.get("partNumber") or "", date.today().strftime("%d/%m/%Y"), st.edition.strip() or "00")
+    sheet = partial(_sheet, wb, banner=banner)
     flagged = {(r.get("conn"), r.get("pin")) for i in model["issues"] if i["severity"] == "error" for r in i["refs"] if r.get("pin")}
     segs = {s["id"]: s for s in (model.get("topology") or {}).get("segments", [])}
 
@@ -117,7 +164,7 @@ def build_workbook(model: dict, customer: str = "", username: str = "", settings
                      " > ".join(route) if route else "NON ROUTÉ", max((d for d in diam if d), default=None)])
         bad = (w["from"]["conn"], w["from"]["pin"]) in flagged or (to.get("conn"), to.get("pin")) in flagged or not route
         fills.append(SEVERITY_FILL["error"] if bad else None)
-    _sheet(wb, "From-To", ["Fil", "Paire", "Polarité", "Signal", "Nom/Red", "Type", "De connecteur", "De pin", "Vers connecteur",
+    sheet("From-To", ["Fil", "Paire", "Polarité", "Signal", "Nom/Red", "Type", "De connecteur", "De pin", "Vers connecteur",
                            "Vers pin", "Segments", "Ø max (mm)"], rows, fills)
 
     rows, fills = [], []
@@ -126,15 +173,15 @@ def build_workbook(model: dict, customer: str = "", username: str = "", settings
             bad = (c["id"], k["pin"]) in flagged
             rows.append([c["ref"], c["partNumber"], k["pin"], ", ".join(k["wireIds"]), k.get("origin") or k.get("dest"), k.get("wire")])
             fills.append(SEVERITY_FILL["error"] if bad else None)
-    _sheet(wb, "Connecteurs", ["Connecteur", "Référence", "Pin", "Fils", "Origine / destination (plan)", "N° fil (plan)"], rows, fills)
+    sheet("Connecteurs", ["Connecteur", "Référence", "Pin", "Fils", "Origine / destination (plan)", "N° fil (plan)"], rows, fills)
 
-    _sheet(wb, "Segments", ["Segment", "Nœud A", "Nœud B", "Ø (mm)", "Repères nomenclature", "Longueur (pt plan)"],
+    sheet("Segments", ["Segment", "Nœud A", "Nœud B", "Ø (mm)", "Repères nomenclature", "Longueur (pt plan)"],
            [[s["id"], s["a"], s["b"], s["diameterMm"], " / ".join(s["bomItems"]), s["lengthPt"]] for s in segs.values()])
-    _sheet(wb, "Nomenclature", ["Pos", "Référence", "Description", "Quantité", "Unité", "Notes", "TBD"],
+    sheet("Nomenclature", ["Pos", "Référence", "Description", "Quantité", "Unité", "Notes", "TBD"],
            [[b["position"], b["partNumber"], b["description"], b["amount"], b["unit"], b["notes"], "oui" if b["tbd"] else ""] for b in model["bom"]])
     order = {"error": 0, "warning": 1, "info": 2}
     issues = sorted(model["issues"], key=lambda i: order[i["severity"]])
-    _sheet(wb, "Rapport", ["Gravité", "Code", "Message"], [[i["severity"], i["code"], i["message"]] for i in issues],
+    sheet("Rapport", ["Gravité", "Code", "Message"], [[i["severity"], i["code"], i["message"]] for i in issues],
            [SEVERITY_FILL.get(i["severity"]) for i in issues])
 
     buf = BytesIO()
