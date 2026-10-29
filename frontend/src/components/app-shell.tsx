@@ -49,23 +49,31 @@ export function AppShell() {
 
   return (
     <div className="flex h-screen flex-col">
-      <div className="h-1 bg-[linear-gradient(90deg,var(--blue)_33%,var(--paper)_33%_66%,var(--red)_66%)]" />
-      <header className="flex items-center gap-4 bg-deep px-4 py-2 text-paper">
-        <h1 className="text-[18px] font-medium tracking-[0.18em]">ARIANE</h1>
-        <span className="text-label opacity-70">{model ? `${model.plugin} · ${model.partNumber ?? ""}` : "Plans de faisceau"}</span>
-        <div className="ml-auto flex items-center gap-2">
-          {user && <span className="text-label opacity-80">{user.label} · {user.username}</span>}
-          {logout && <button type="button" className="btn border-paper/40 bg-transparent text-paper hover:bg-paper/10" onClick={logout}>Déconnexion</button>}
-          {c && (
-            <>
-              <span className="pill bg-danger text-paper">{c.error} erreurs</span>
-              <span className="pill bg-warn text-paper">{c.warning} alertes</span>
-            </>
-          )}
+      <header className="flex h-16 shrink-0 items-center gap-3 border-b border-line bg-paper px-4">
+        <div className="flex items-stretch gap-3.5 py-3">
+          <div className="hem-stripe" aria-hidden="true"><span /><span /><span /></div>
+          <div className="flex flex-col justify-center">
+            <span className="hem-eyebrow hidden sm:block">{model ? `${model.plugin} · ${model.partNumber ?? ""}` : "Plans de faisceau"}</span>
+            <h1 className="text-[18px] font-semibold leading-tight tracking-[0.04em] text-deep">ARIANE<span className="text-red">·</span></h1>
+          </div>
         </div>
+        <div className="flex-1" />
+        {c && (
+          <div className="flex items-center gap-2">
+            <span className="pill bg-danger text-paper">{c.error} erreurs</span>
+            <span className="pill bg-warn text-paper">{c.warning} alertes</span>
+          </div>
+        )}
+        {user && (
+          <div className="hidden text-right sm:block">
+            <p className="text-[12px] font-semibold">{user.label}</p>
+            <p className="font-mono text-[11px] text-mute">{user.username}</p>
+          </div>
+        )}
+        {logout && <button type="button" className="btn-ghost" onClick={logout}>Déconnexion</button>}
       </header>
       <div className="flex min-h-0 flex-1">
-        <aside className="w-[300px] shrink-0 overflow-y-auto border-r border-line bg-paper">
+        <aside className="on-deep w-[300px] shrink-0 overflow-y-auto border-r border-line bg-paper">
           <ImportPanel onLoaded={(m, id) => { setModel(m); setImportId(id); setSel({}); setTab("report"); setRefresh((n) => n + 1); }} />
           <HistoryPanel refreshKey={refresh} onOpen={(m, id) => { setModel(m); setImportId(id); setSel({}); setTab("report"); }} />
           {model && (

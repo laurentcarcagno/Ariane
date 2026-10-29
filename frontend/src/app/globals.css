@@ -17,9 +17,23 @@
   :focus-visible { outline: 2px solid var(--sky); outline-offset: 1px; }
 }
 
+/* Sovereign Deep Blue panel (as the pdf2md-ui side menu): the tokens are remapped, so the components inside need no change. */
+.on-deep {
+  --paper: #12293a; --hover: #0f3250; --veil: #17476c; --line: #214059;
+  --deep: #fcfdfe; --ink: #fcfdfe; --dim: #c2d3e0; --mute: #93abbd;
+  --danger: #ff8f8f; --danger-bg: #3a1a22; --warn: #e8b84a; --warn-bg: #3a2f12; --ok: #5fcf8f; --ok-bg: #123a26;
+  color: var(--ink); color-scheme: dark;
+}
+
 @layer components {
   .label { @apply text-label font-bold uppercase tracking-[0.12em] text-dim; }
   .btn { @apply h-8 px-3.5 text-label font-bold uppercase tracking-[0.12em] border border-line bg-paper text-deep hover:bg-hover disabled:opacity-50; }
   .btn-primary { @apply btn border-sky bg-sky text-paper hover:bg-blue; }
+  .btn-ghost { @apply btn border-deep bg-transparent hover:bg-hover; }
+  .hem-eyebrow { @apply text-label font-bold uppercase tracking-[0.18em] text-mute; }
+  .hem-stripe { @apply flex w-1 shrink-0 flex-col self-stretch; }
+  .hem-stripe > span:nth-child(1) { @apply flex-1 bg-blue; }
+  .hem-stripe > span:nth-child(2) { @apply flex-1 bg-paper; }
+  .hem-stripe > span:nth-child(3) { @apply flex-1 bg-red; }
   .pill { @apply inline-flex items-center gap-1.5 px-2 py-0.5 text-label font-bold uppercase tracking-[0.08em]; }
 }
