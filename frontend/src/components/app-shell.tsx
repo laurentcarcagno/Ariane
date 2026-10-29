@@ -51,6 +51,8 @@ export function AppShell() {
     <div className="flex h-screen flex-col">
       <header className="flex h-16 shrink-0 items-center gap-3 border-b border-line bg-paper px-4">
         <div className="flex items-stretch gap-3.5 py-3">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/hemeria/hemeria-logo-color.png" alt="Hemeria" className="h-10 w-auto self-center" />
           <div className="hem-stripe" aria-hidden="true"><span /><span /><span /></div>
           <div className="flex flex-col justify-center">
             <span className="hem-eyebrow hidden sm:block">{model ? `${model.plugin} · ${model.partNumber ?? ""}` : "Plans de faisceau"}</span>
@@ -64,16 +66,10 @@ export function AppShell() {
             <span className="pill bg-warn text-paper">{c.warning} alertes</span>
           </div>
         )}
-        {user && (
-          <div className="hidden text-right sm:block">
-            <p className="text-[12px] font-semibold">{user.label}</p>
-            <p className="font-mono text-[11px] text-mute">{user.username}</p>
-          </div>
-        )}
-        {logout && <button type="button" className="btn-ghost" onClick={logout}>Déconnexion</button>}
       </header>
       <div className="flex min-h-0 flex-1">
-        <aside className="on-deep w-[300px] shrink-0 overflow-y-auto border-r border-line bg-paper">
+        <aside className="on-deep flex w-[300px] shrink-0 flex-col border-r border-line bg-paper">
+          <div className="min-h-0 flex-1 overflow-y-auto">
           <ImportPanel onLoaded={(m, id) => { setModel(m); setImportId(id); setSel({}); setTab("report"); setRefresh((n) => n + 1); }} />
           <HistoryPanel refreshKey={refresh} onOpen={(m, id) => { setModel(m); setImportId(id); setSel({}); setTab("report"); }} />
           {model && (
@@ -86,6 +82,18 @@ export function AppShell() {
                 <button type="button" className="btn" onClick={() => exportJson(model)}>JSON</button>
                 <button type="button" className="btn col-span-2" disabled={tab !== "harness"} onClick={() => exportSvg(svgRef.current, "faisceau.svg")}>SVG de la vue</button>
               </div>
+            </div>
+          )}
+          </div>
+          {(user || logout) && (
+            <div className="flex shrink-0 items-center gap-3 border-t border-line p-4">
+              {user && (
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[12px] font-semibold">{user.label}</p>
+                  <p className="truncate font-mono text-[11px] text-mute">{user.username}</p>
+                </div>
+              )}
+              {logout && <button type="button" className="btn-ghost" onClick={logout}>Déconnexion</button>}
             </div>
           )}
         </aside>
