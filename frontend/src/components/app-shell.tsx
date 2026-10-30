@@ -13,6 +13,7 @@ import { HarnessView } from "./harness-view";
 import { ImportPanel } from "./import-panel";
 import { InfoPanel } from "./info-panel";
 import { ReportView } from "./report-view";
+import { SidebarHandle, useSidebarWidth } from "./sidebar-resize";
 
 type Tab = "harness" | "connectors" | "cablage" | "report";
 const TABS: [Tab, string][] = [["harness", "Faisceau"], ["connectors", "Connecteurs"], ["cablage", "Câblage"], ["report", "Rapport"]];
@@ -25,6 +26,7 @@ export function AppShell() {
   const { user, logout } = useSession();
   const [tab, setTab] = useState<Tab>("report");
   const [sel, setSel] = useState<Selection>({});
+  const [sidebarWidth, setSidebarWidth] = useSidebarWidth();
   const [query, setQuery] = useState("");
   const [labels, setLabels] = useState(true);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -68,7 +70,7 @@ export function AppShell() {
         )}
       </header>
       <div className="flex min-h-0 flex-1">
-        <aside className="on-deep flex w-[300px] shrink-0 flex-col border-r border-line bg-paper">
+        <aside className="on-deep relative flex shrink-0 flex-col border-r border-line bg-paper" style={{ width: sidebarWidth }}>
           <div className="min-h-0 flex-1 overflow-y-auto">
           <ImportPanel onLoaded={(m, id) => { setModel(m); setImportId(id); setSel({}); setTab("report"); setRefresh((n) => n + 1); }} />
           <HistoryPanel refreshKey={refresh} onOpen={(m, id) => { setModel(m); setImportId(id); setSel({}); setTab("report"); }} />
@@ -96,6 +98,7 @@ export function AppShell() {
               {logout && <button type="button" className="btn-ghost" onClick={logout}>Déconnexion</button>}
             </div>
           )}
+          <SidebarHandle width={sidebarWidth} onChange={setSidebarWidth} />
         </aside>
         <main className="flex min-w-0 flex-1 flex-col">
           <nav className="flex border-b border-line bg-paper" role="tablist">
